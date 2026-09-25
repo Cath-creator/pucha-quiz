@@ -206,8 +206,11 @@ async function getParticipants() {
     console.error('Erro ao carregar dados:', error);
     return [];
   }
-  return data;
+  
+  // 確保回傳的一定是陣列，如果 data 不是陣列就回傳空陣列 []
+  return Array.isArray(data) ? data : [];
 }
+
 
 async function nextParticipantId() {
   const ps = await getParticipants();
@@ -377,24 +380,40 @@ function downloadFile(filename,content) {
   const blob=new Blob(["\\ufeff"+content],{type:"text/csv;charset=utf-8"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
-function downloadParticipant(id) {
-  const p=getParticipants().find(x=>x.id===id); if(!p)return;
-  const rows=[["Participant ID","Gender","First time","Question ID","Category","Question","Chosen answer","Correct answer","Correct","Participant accuracy"]];
-  p.answers.forEach(a=>rows.push([p.id,p.gender,p.firstTime,a.id,a.cat,a.question,a.chosen,a.correctAnswer,a.correct?"Yes":"No",p.accuracy]));
-  downloadFile(p.id+".csv",rows.map(r=>r.map(csvEscape).join(",")).join("\n"));
+async function downloadParticipant(id) {
+  const ps = await getParticipants(); // 這裡務必要有 await
+  const p = ps.find(x => x.id === id); 
+  if(!p) return;
+  
+  const rows = [["Participant ID","Gender","First time","Question ID","Category","Question","Chosen answer","Correct answer","Correct","Participant accuracy"]];
+  (p.answers || []).forEach(a => rows.push([p.id, p.gender, p.first_time || p.firstTime, a.id, a.cat, a.question, a.chosen, a.correctAnswer, a.correct?"Yes":"No", p.accuracy]));
+  
+  downloadFile(p.id+".csv", rows.map(r => r.map(csvEscape).join(",")).join("\n"));
 }
-function downloadAllCSV() {
-  const ps=getParticipants();
-  const rows=[["Participant ID","Gender","First time","Date","Score","Total","Accuracy","Question ID","Category","Question","Chosen answer","Correct answer","Correct"]];
-  ps.forEach(p=>p.answers.forEach(a=>rows.push([p.id,p.gender,p.firstTime,p.date,p.score,p.total,p.accuracy,a.id,a.cat,a.question,a.chosen,a.correctAnswer,a.correct?"Yes":"No"])));
-  downloadFile("PU_CHA_quiz_dados.csv",rows.map(r=>r.map(csvEscape).join(",")).join("\n"));
+async function downloadAllCSV() {
+  const ps = await getParticipants(); // 務必要加上 await
+  const rows = [["Participant ID","Gender","First time","Date","Score","Total","Accuracy","Question ID","Category","Question","Chosen answer","Correct answer","Correct"]];
+  ps.forEach(p => (p.answers || []).forEach(a => rows.push([p.id, p.gender, p.first_time || p.firstTime, p.created_at || p.date, p.score, p.total, p.accuracy, a.id, a.cat, a.question, a.chosen, a.correctAnswer, a.correct?"Yes":"No"])));
+  downloadFile("PU_CHA_quiz_dados.csv", rows.map(r => r.map(csvEscape).join(",")).join("\n"));
 }
-function clearAllData() {
-  if(confirm("Tem a certeza de que quer apagar todos os dados guardados neste navegador? Esta acção não pode ser desfeita.")){
-    localStorage.removeItem(STORAGE_KEY); renderAdmin();
+async function clearAllData() {
+  if(!confirm("ATENÇÃO: Vais apagar TODOS os dados da nuvem permanentemente! Tens a certeza?")) return;
+
+  // 使用 .neq('id', '') 代表刪除所有 id 不是空的記錄（也就是全部刪除）
+  const { error } = await supabaseClient
+    .from('quiz_responses')
+    .delete()
+    .neq('id', '');
+
+  if(error) {
+    console.error("Erro ao limpar dados:", error);
+    alert("Erro ao limpar os dados da nuvem. Verifica as permissões (RLS) no Supabase.");
+    return;
   }
-}
-document.addEventListener("keydown",e=>{if(e.key==="Enter" && !document.getElementById("adminLogin").classList.contains("hidden")) loginAdmin();});
+
+  alert("Todos os dados foram apagados com sucesso.");
+  renderAdmin();
+}document.addEventListener("keydown",e=>{if(e.key==="Enter" && !document.getElementById("adminLogin").classList.contains("hidden")) loginAdmin();});
 </script>
 </body>
 </html>
