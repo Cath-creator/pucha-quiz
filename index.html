@@ -1,4 +1,180 @@
-const SUPABASE_URL = 'https://bxlmlplxqcqsxpenlfqo.supabase.co';
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#18A7A7">
+<title>PU CHA Quiz</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --turq:#18A7A7; --turq-dark:#087F83; --orange:#F28C28; --purple:#7651B8;
+  --purple-dark:#55368E; --white:#fff; --ink:#25324A; --muted:#667085;
+  --bg:#F6F9FC; --success:#16834A; --danger:#C53B3B; --border:#DCE4EC;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+header{background:linear-gradient(135deg,var(--turq),var(--purple));color:#fff;padding:22px 16px;text-align:center}
+header h1{margin:0;font-size:clamp(28px,5vw,44px);letter-spacing:.3px}
+header p{margin:8px 0 0;opacity:.94}
+.container{width:min(980px,94%);margin:24px auto 50px}
+.card{background:#fff;border-radius:20px;padding:24px;box-shadow:0 8px 28px rgba(37,50,74,.09);margin-bottom:18px}
+h2,h3{margin-top:0}
+label{font-weight:700;display:block;margin:16px 0 7px}
+select,button,input{font:inherit}
+select{width:100%;padding:13px;border:1px solid var(--border);border-radius:11px;background:#fff}
+.btn{border:0;border-radius:12px;padding:13px 18px;font-weight:800;cursor:pointer;transition:.15s;min-height:46px}
+.btn:hover{transform:translateY(-1px)}
+.primary{background:var(--turq);color:#fff} .secondary{background:var(--purple);color:#fff}
+.orange{background:var(--orange);color:#fff} .light{background:#EEF7F7;color:var(--turq-dark)}
+.danger{background:#FDECEC;color:var(--danger)}
+.hidden{display:none!important}
+.progress-wrap{height:10px;background:#E9EEF4;border-radius:99px;overflow:hidden;margin:10px 0 22px}
+.progress{height:100%;background:linear-gradient(90deg,var(--orange),var(--purple));width:0;transition:.3s}
+.meta{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:14px}
+.question{font-size:clamp(19px,3vw,25px);font-weight:800;line-height:1.35;margin:14px 0 20px}
+.options{display:grid;gap:11px}
+.option{width:100%;text-align:left;background:#fff;border:2px solid var(--border);color:var(--ink);border-radius:13px;padding:14px;cursor:pointer;line-height:1.35}
+.option:hover{border-color:var(--turq);background:#F5FFFF}
+.option.correct{border-color:var(--success);background:#EAF8F0;color:#126A3E}
+.option.wrong{border-color:var(--danger);background:#FDEEEE;color:#9B2C2C}
+.option:disabled{cursor:default}
+.feedback{margin-top:17px;padding:15px;border-radius:13px;line-height:1.5}
+.feedback.ok{background:#EAF8F0;border-left:5px solid var(--success)}
+.feedback.no{background:#FDEEEE;border-left:5px solid var(--danger)}
+.actions{display:flex;gap:10px;justify-content:flex-end;margin-top:17px;flex-wrap:wrap}
+.small{font-size:13px;color:var(--muted)}
+.score{font-size:46px;font-weight:900;color:var(--purple);text-align:center}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.kpi{background:#fff;border:1px solid var(--border);border-radius:15px;padding:16px;text-align:center}
+.kpi strong{font-size:26px;display:block;color:var(--turq-dark)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+th{background:#F2F6FA;position:sticky;top:0}
+.table-wrap{overflow:auto;max-height:520px;border:1px solid var(--border);border-radius:12px}
+details{margin-top:12px;border:1px solid var(--border);border-radius:12px;padding:12px}
+summary{font-weight:800;cursor:pointer}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#EEE8FB;color:var(--purple-dark);font-size:12px;font-weight:800}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:10px 20px 30px}
+.notice{background:#FFF6E8;border-left:5px solid var(--orange);padding:12px;border-radius:10px}
+#adminLogin{max-width:440px;margin:40px auto}
+@media(max-width:600px){
+ .card{padding:18px;border-radius:16px}
+ .actions .btn{width:100%}
+ .kpis{grid-template-columns:1fr 1fr}
+ th,td{font-size:12px;padding:8px}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>PU CHA Quiz</h1>
+  <p>Aprender • Reflectir • Agir</p>
+</header>
+
+<main class="container">
+<section id="intro" class="card">
+  <h2>Bem-vindo/a ao PU CHA Quiz!</h2>
+  <p>Responde a 10 perguntas seleccionadas aleatoriamente. Depois de cada resposta, verás imediatamente a explicação.</p>
+  <div class="notice"><strong>Nota:</strong> Não recolhemos o teu nome. Os dados são usados apenas para análise do quiz.</div>
+  <label for="gender">Género</label>
+  <select id="gender">
+    <option value="">— Selecciona —</option>
+    <option>Homem</option>
+    <option>Mulher</option>
+    <option>Outro</option>
+    <option>Prefiro não responder</option>
+  </select>
+  <label for="firstTime">É a primeira vez que participa no PU CHA Quiz?</label>
+  <select id="firstTime">
+    <option value="">— Selecciona —</option>
+    <option>Sim</option>
+    <option>Não</option>
+  </select>
+  <div class="actions"><button class="btn primary" onclick="startQuiz()">Começar Quiz</button></div>
+</section>
+
+<section id="quiz" class="hidden">
+  <div class="card">
+    <div class="meta"><span id="qCounter"></span><span id="participantLabel"></span></div>
+    <div class="progress-wrap"><div class="progress" id="progress"></div></div>
+    <div class="badge" id="category"></div>
+    <div class="question" id="question"></div>
+    <div class="options" id="options"></div>
+    <div id="feedback" class="hidden"></div>
+    <div class="actions"><button id="nextBtn" class="btn secondary hidden" onclick="nextQuestion()">Próxima pergunta</button></div>
+  </div>
+</section>
+
+<section id="result" class="hidden card">
+  <h2 style="text-align:center">Resultado</h2>
+  <div class="score" id="score"></div>
+  <p id="resultText" style="text-align:center"></p>
+  <div class="actions" style="justify-content:center">
+    <button class="btn primary" onclick="resetQuiz()">Novo participante</button>
+  </div>
+</section>
+
+<section id="adminLogin" class="card hidden">
+  <h2>Área de administração</h2>
+  <p class="small">Acesso reservado.</p>
+  <label for="adminPassword">Palavra-passe</label>
+  <input id="adminPassword" type="password" autocomplete="off" style="width:100%;padding:13px;border:1px solid var(--border);border-radius:11px">
+  <div id="loginError" class="small" style="color:var(--danger);margin-top:8px"></div>
+  <div class="actions"><button class="btn secondary" onclick="loginAdmin()">Entrar</button></div>
+</section>
+
+<section id="admin" class="hidden">
+  <div class="card">
+    <div class="meta"><h2 style="margin:0">Painel de Dados</h2><button class="btn light" onclick="closeAdmin()">Fechar</button></div>
+    <p class="small">Os dados apresentados são os dados guardados neste navegador/dispositivo.</p>
+    <div class="kpis">
+      <div class="kpi"><strong id="kParticipants">0</strong>Participantes</div>
+      <div class="kpi"><strong id="kAnswers">0</strong>Respostas</div>
+      <div class="kpi"><strong id="kAccuracy">0%</strong>Precisão geral</div>
+      <div class="kpi"><strong id="kQuestions">50</strong>Perguntas no banco</div>
+      <div class="kpi"><strong id="kFirstTime">0</strong>Primeira vez</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Dados por género</h3>
+    <div class="table-wrap"><table><thead><tr><th>Género</th><th>Participantes</th><th>Percentagem</th><th>Precisão</th></tr></thead><tbody id="genderTable"></tbody></table></div>
+  </div>
+
+  <div class="card">
+    <h3>Precisão por categoria</h3>
+    <div class="table-wrap"><table><thead><tr><th>Categoria</th><th>Respostas</th><th>Correctas</th><th>Precisão</th></tr></thead><tbody id="catTable"></tbody></table></div>
+  </div>
+
+  <div class="card">
+    <h3>Desempenho por pergunta</h3>
+    <div class="table-wrap"><table><thead><tr><th>ID</th><th>Categoria</th><th>Pergunta</th><th>Vezes apresentada</th><th>Correctas</th><th>Precisão</th></tr></thead><tbody id="qTable"></tbody></table></div>
+  </div>
+
+  <div class="card">
+    <h3>Question bank</h3>
+    <p class="small">Todas as perguntas e opções correctas estão disponíveis abaixo.</p>
+    <div id="bank"></div>
+  </div>
+
+  <div class="card">
+    <h3>Dados dos participantes</h3>
+    <div class="actions" style="justify-content:flex-start">
+      <button class="btn orange" onclick="downloadAllCSV()">Descarregar todos os dados (CSV)</button>
+      <button class="btn light" onclick="clearAllData()">Apagar dados deste navegador</button>
+    </div>
+    <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>ID</th><th>Género</th><th>1ª vez?</th><th>Resultado</th><th>Data</th><th>Dados</th></tr></thead><tbody id="participantsTable"></tbody></table></div>
+  </div>
+</section>
+</main>
+
+<footer>
+  PU CHA • Quiz educativo | Para abrir a área de administração, utilize o botão discreto no canto inferior direito.
+  <button onclick="showAdminLogin()" style="border:0;background:transparent;color:#98A2B3;cursor:pointer;font-size:11px">Admin</button>
+</footer>
+
+<script>const SUPABASE_URL = 'https://bxlmlplxqcqsxpenlfqo.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_k4cxnAh5wL4sRaFX8ocgmA_5CiXwcHx';
 
 const supabaseClient = window.supabase.createClient(
