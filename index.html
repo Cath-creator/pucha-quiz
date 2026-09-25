@@ -25,6 +25,7 @@ async function getParticipants() {
     .from('quiz_responses')
     .select('*')
     .order('created_at', { ascending: false });
+  
   if (error) {
     console.error('Erro ao carregar dados:', error);
     return [];
