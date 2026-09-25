@@ -196,18 +196,38 @@ function shuffle(arr) {
   for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
   return a;
 }
-function getParticipants() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]"); } catch(e) { return []; } }
-function saveParticipants(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
-function nextParticipantId() {
-  const ps=getParticipants();
-  let max=0; ps.forEach(p=>{const n=parseInt(String(p.id).replace(/\D/g,""),10); if(!isNaN(n)) max=Math.max(max,n);});
-  return "PUCHA-" + String(max+1).padStart(5,"0");
+async function getParticipants() {
+  const { data, error } = await supabaseClient
+    .from('quiz_responses')
+    .select('*')
+    .order('created_at', { ascending: false });
+  
+  if (error) {
+    console.error('Erro ao carregar dados:', error);
+    return [];
+  }
+  return data;
 }
-function startQuiz() {
+
+async function nextParticipantId() {
+  const ps = await getParticipants();
+  let max = 0; 
+  ps.forEach(p => {
+    const n = parseInt(String(p.id).replace(/\D/g, ""), 10); 
+    if(!isNaN(n)) max = Math.max(max, n);
+  });
+  return "PUCHA-" + String(max + 1).padStart(5, "0");
+}
+
+async function startQuiz() {
   const gender=document.getElementById("gender").value;
   const firstTime=document.getElementById("firstTime").value;
   if(!gender || !firstTime) { alert("Por favor, preenche os dois campos antes de começar."); return; }
-  state={participantId:nextParticipantId(),gender,firstTime,questions:shuffle(QUESTIONS).slice(0,10),current:0,score:0,answers:[]};
+  
+  const pId = await nextParticipantId();
+
+  state={participantId:pId, gender, firstTime, questions:shuffle(QUESTIONS).slice(0,10), current:0, score:0, answers:[]};
+  
   document.getElementById("intro").classList.add("hidden");
   document.getElementById("result").classList.add("hidden");
   document.getElementById("quiz").classList.remove("hidden");
@@ -250,19 +270,33 @@ function nextQuestion() {
   if(state.current<9){state.current++;renderQuestion();}
   else finishQuiz();
 }
-function finishQuiz() {
-  const record={
-    id:state.participantId, gender:state.gender, firstTime:state.firstTime,
-    score:state.score, total:10, accuracy:state.score/10,
-    date:new Date().toISOString(), answers:state.answers
+async function finishQuiz() {
+  const record = {
+    id: state.participantId, 
+    gender: state.gender, 
+    first_time: state.firstTime,
+    score: state.score, 
+    total: 10, 
+    accuracy: state.score / 10,
+    answers: state.answers
   };
-  const ps=getParticipants(); ps.push(record); saveParticipants(ps);
+
+  // 直接寫入 Supabase 雲端資料庫
+  const { error } = await supabaseClient
+    .from('quiz_responses')
+    .insert([record]);
+
+  if (error) {
+    console.error("Erro ao guardar dados:", error);
+    alert("Erro ao sincronizar os dados. Por favor, tente novamente.");
+    return;
+  }
+
   document.getElementById("quiz").classList.add("hidden");
   document.getElementById("result").classList.remove("hidden");
-  document.getElementById("score").textContent=`${state.score} / 10`;
-  document.getElementById("resultText").textContent=`Precisão: ${Math.round(state.score*10)}%. Obrigado pela participação!`;
-}
-function resetQuiz() {
+  document.getElementById("score").textContent = `${state.score} / 10`;
+  document.getElementById("resultText").textContent = `Precisão: ${Math.round(state.score * 10)}%. Obrigado pela participação!`;
+}function resetQuiz() {
   document.getElementById("result").classList.add("hidden");
   document.getElementById("intro").classList.remove("hidden");
   document.getElementById("gender").value="";
@@ -296,49 +330,49 @@ function closeAdmin() {
   document.getElementById("intro").classList.remove("hidden");
 }
 function pct(n,d){return d?Math.round(n/d*100):0;}
-function renderAdmin() {
-  const ps=getParticipants();
-  const totalAnswers=ps.reduce((s,p)=>s+p.answers.length,0);
-  const correct=ps.reduce((s,p)=>s+p.answers.filter(a=>a.correct).length,0);
-  document.getElementById("kParticipants").textContent=ps.length;
-  document.getElementById("kAnswers").textContent=totalAnswers;
-  document.getElementById("kAccuracy").textContent=pct(correct,totalAnswers)+"%";
-  const firstTimeCount=ps.filter(p=>p.firstTime==="Sim").length;
-  document.getElementById("kFirstTime").textContent=firstTimeCount;
+async function renderAdmin() {
+  const ps = await getParticipants(); // 改為非同步取得雲端資料
+  const totalAnswers = ps.reduce((s, p) => s + p.answers.length, 0);
+  const correct = ps.reduce((s, p) => s + p.answers.filter(a => a.correct).length, 0);
+  
+  document.getElementById("kParticipants").textContent = ps.length;
+  document.getElementById("kAnswers").textContent = totalAnswers;
+  document.getElementById("kAccuracy").textContent = pct(correct, totalAnswers) + "%";
+  const firstTimeCount = ps.filter(p => p.first_time === "Sim" || p.firstTime === "Sim").length;
+  document.getElementById("kFirstTime").textContent = firstTimeCount;
 
-  const genders=["Homem","Mulher","Outro","Prefiro não responder"];
-  document.getElementById("genderTable").innerHTML=genders.map(g=>{
-    const group=ps.filter(p=>p.gender===g);
-    const a=group.flatMap(p=>p.answers);
-    const c=a.filter(x=>x.correct).length;
-    return `<tr><td>${g}</td><td>${group.length}</td><td>${pct(group.length,ps.length)}%</td><td>${pct(c,a.length)}%</td></tr>`;
+  const genders = ["Homem", "Mulher", "Outro", "Prefiro não responder"];
+  document.getElementById("genderTable").innerHTML = genders.map(g => {
+    const group = ps.filter(p => p.gender === g);
+    const a = group.flatMap(p => p.answers || []);
+    const c = a.filter(x => x.correct).length;
+    return `<tr><td>${g}</td><td>${group.length}</td><td>${pct(group.length, ps.length)}%</td><td>${pct(c, a.length)}%</td></tr>`;
   }).join("");
 
-  const cats=[...new Set(QUESTIONS.map(q=>q.cat))];
-  document.getElementById("catTable").innerHTML=cats.map(cat=>{
-    const a=ps.flatMap(p=>p.answers).filter(x=>x.cat===cat);
-    const c=a.filter(x=>x.correct).length;
-    return `<tr><td>${cat}</td><td>${a.length}</td><td>${c}</td><td>${pct(c,a.length)}%</td></tr>`;
+  const cats = [...new Set(QUESTIONS.map(q => q.cat))];
+  document.getElementById("catTable").innerHTML = cats.map(cat => {
+    const a = ps.flatMap(p => p.answers || []).filter(x => x.cat === cat);
+    const c = a.filter(x => x.correct).length;
+    return `<tr><td>${cat}</td><td>${a.length}</td><td>${c}</td><td>${pct(c, a.length)}%</td></tr>`;
   }).join("");
 
-  document.getElementById("qTable").innerHTML=QUESTIONS.map(q=>{
-    const a=ps.flatMap(p=>p.answers).filter(x=>x.id===q.id);
-    const c=a.filter(x=>x.correct).length;
-    return `<tr><td>${q.id}</td><td>${q.cat}</td><td>${escapeHtml(q.q)}</td><td>${a.length}</td><td>${c}</td><td>${pct(c,a.length)}%</td></tr>`;
+  document.getElementById("qTable").innerHTML = QUESTIONS.map(q => {
+    const a = ps.flatMap(p => p.answers || []).filter(x => x.id === q.id);
+    const c = a.filter(x => x.correct).length;
+    return `<tr><td>${q.id}</td><td>${q.cat}</td><td>${escapeHtml(q.q)}</td><td>${a.length}</td><td>${c}</td><td>${pct(c, a.length)}%</td></tr>`;
   }).join("");
 
-  document.getElementById("bank").innerHTML=QUESTIONS.map(q=>`<details><summary>${q.id} — ${escapeHtml(q.q)}</summary>
-    <ol>${q.opts.map((o,i)=>`<li>${escapeHtml(o)} ${i===q.a?"<strong>(correcta)</strong>":""}</li>`).join("")}</ol>
+  document.getElementById("bank").innerHTML = QUESTIONS.map(q => `<details><summary>${q.id} — ${escapeHtml(q.q)}</summary>
+    <ol>${q.opts.map((o, i) => `<li>${escapeHtml(o)}${i === q.a ? "<strong>(correcta)</strong>" : ""}</li>`).join("")}</ol>
     <p class="small"><strong>Explicação:</strong> ${escapeHtml(q.e)}</p>
   </details>`).join("");
 
-  document.getElementById("participantsTable").innerHTML=ps.slice().reverse().map((p,i)=>`<tr>
-    <td>${p.id}</td><td>${p.gender}</td><td>${p.firstTime}</td><td>${p.score}/10 (${pct(p.score,10)}%)</td>
-    <td>${new Date(p.date).toLocaleString("pt-PT")}</td>
+  document.getElementById("participantsTable").innerHTML = ps.slice().map((p, i) => `<tr>
+    <td>${p.id}</td><td>${p.gender}</td><td>${p.first_time || p.firstTime}</td><td>${p.score}/10 (${pct(p.score, 10)}%)</td>
+    <td>${new Date(p.created_at || p.date).toLocaleString("pt-PT")}</td>
     <td><button class="btn light" style="padding:7px 10px;min-height:34px" onclick="downloadParticipant('${p.id}')">CSV</button></td>
   </tr>`).join("");
-}
-function csvEscape(v){return '"'+String(v??"").replace(/"/g,'""')+'"';}
+}function csvEscape(v){return '"'+String(v??"").replace(/"/g,'""')+'"';}
 function downloadFile(filename,content) {
   const blob=new Blob(["\\ufeff"+content],{type:"text/csv;charset=utf-8"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
